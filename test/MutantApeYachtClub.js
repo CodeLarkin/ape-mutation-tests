@@ -36,7 +36,6 @@ describe("Test harness for MutantApeYachtClub", function () {
         await this.bacc.deployed()
 
         // Deploy MutantApeYachtClub and set base URI
-        this.Mayc = await ethers.getContractFactory("MutantApeYachtClub", this.alice)
         this.mayc = await this.Mayc.deploy("MaycTest", "MAYCT", this.bayc.address, this.bacc.address)
         await this.mayc.deployed()
 
