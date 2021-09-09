@@ -42,6 +42,9 @@ describe("Test harness for MutantApeYachtClub", function () {
 
         this.maycBaseURI = "https://boredapeyachtclub.com/api/mutants/"
         await this.mayc.setBaseURI(this.maycBaseURI)
+
+        // Point the ChemistryClub to the MutantApe contract
+        this.bacc.connect(this.alice).setMutationContractAddress(this.mayc.address)
     });
 
     it("Bayc and Bacc URIs are set correctly", async function () {
@@ -83,19 +86,57 @@ describe("Test harness for MutantApeYachtClub", function () {
         expect(await this.mayc.isMinted(0)).to.equal(true)
     });
 
-    //it("Apes, serums and mutants should deploy successfully", async function () {
-    //    // TODO set starting indices (for MAYC at least)
+    it("Can't mutate until Serum mutation is active", async function () {
+        await expectRevert(
+            this.mayc.connect(this.bobby).mutateApeWithSerum(0, 0),
+            "Serum Mutation is not active"
+        )
+    });
 
-    //    /* bobby mints a bored ape
-    //     * bobby gets airdropped or mints a serum
-    //     * bobby applies the serum to his ape, burns both
-    //     * as a side effect, bobby mints a mutant ape
-    //     *
-    //     * repeat to confirm works with two apes
-    //     * redo but bobby has two apes, serum works on only the correct one
-    //     * redo with each serum, confirm you cant use two serums
-    //     */
+    it("Can't mutate without a BoredApe", async function () {
+        await this.bacc.connect(this.alice).mintBatch([0], [1])
+        await this.mayc.connect(this.alice).toggleSerumMutationActive()
+        await expectRevert(
+            this.mayc.connect(this.bobby).mutateApeWithSerum(0, 0),
+            "ERC721: owner query for nonexistent token"
+        )
+        await this.bayc.connect(this.alice).flipSaleState()
+        await this.bayc.connect(this.alice).mintApe(1, { value: ethers.utils.parseEther("1.0") })
+        // alice has the BoredApe, bobby tries to mutate it
+        await expectRevert(
+            this.mayc.connect(this.bobby).mutateApeWithSerum(0, 0),
+            "Must own the ape you're attempting to mutate"
+        )
+    });
 
+    it("Can't mutate without a Serum", async function () {
+        await this.bayc.connect(this.alice).flipSaleState()
+        await this.bayc.connect(this.bobby).mintApe(1, { value: ethers.utils.parseEther("1.0") })
+        await this.mayc.connect(this.alice).toggleSerumMutationActive()
+        await expectRevert(
+            this.mayc.connect(this.bobby).mutateApeWithSerum(0, 0),
+            "Must own at least one of this serum type to mutate"
+        )
+    });
 
-    //});
+    it("Can mutate a BoredApe with a Serum", async function () {
+
+        await this.bayc.connect(this.alice).flipSaleState()
+        await this.bayc.connect(this.bobby).mintApe(1, { value: ethers.utils.parseEther("1.0") })
+
+        await this.bacc.connect(this.alice).mintBatch([0], [1]) // mints to Bacc owner (alice)
+        // transfer the serum to Bobby so he can mutate his ape
+        //     this would be where the owner airdrops serums to all BoredApe holders
+        await this.bacc.connect(this.alice).safeBatchTransferFrom(this.alice.address, this.bobby.address, [0], [1], 0)
+
+        let balance = await this.bacc.connect(this.bobby).balanceOf(this.bobby.address, 0)
+        expect(balance).to.equal(1)
+        await this.mayc.connect(this.alice).toggleSerumMutationActive()
+
+        expect(await this.mayc.isMinted(0)).to.equal(false)
+        await this.mayc.connect(this.bobby).mutateApeWithSerum(0, 0)
+        let mutantId = await this.mayc.connect(this.bobby).getMutantIdForApeAndSerumCombination(0, 0)
+        expect(await this.mayc.isMinted(mutantId)).to.equal(true)
+    });
+
 });
